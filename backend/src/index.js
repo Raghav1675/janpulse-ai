@@ -42,13 +42,20 @@
 
 // const PORT = 5000;
 // app.listen(PORT, () => console.log(`JanPulse API Gateway active on port ${PORT}`));
-
+import mongoose from 'mongoose';
+import { telemetryMiddleware } from './middleware/logger.js';
 import express from 'express';
 import cors from 'cors';
 import apiRoutes from './routes/apiRoutes.js';
 
 const app = express();
+// Connect to MongoDB Data Lake
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log("MongoDB Telemetry Connected"))
+  .catch(err => console.error("MongoDB Connection Failed:", err));
 
+// Apply the telemetry interceptor globally to all routes
+app.use(telemetryMiddleware);
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
