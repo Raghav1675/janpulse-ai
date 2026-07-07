@@ -9,7 +9,7 @@ export default function CitizenPortal() {
     setStatus('Processing with Gemini Engine...');
     
     try {
-      const response = await fetch('http://localhost:5000/api/submit', {
+      const response = await fetch('https://janpulse-backend.onrender.com/api/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text })

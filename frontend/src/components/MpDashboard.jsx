@@ -12,7 +12,7 @@ export default function MpDashboard() {
   ];
 
 useEffect(() => {
-    fetch('http://localhost:5000/api/cluster', {
+    fetch('https://janpulse-backend.onrender.com/api/cluster', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ grievances: mockRawGrievances })
