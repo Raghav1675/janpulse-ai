@@ -12,14 +12,11 @@ export default function MpDashboard() {
   ];
 
 useEffect(() => {
-    fetch('https://janpulse-backend.onrender.com/api/cluster', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ grievances: mockRawGrievances })
-    })
+    // UPDATED: Now a simple GET request without mock data
+    fetch('https://janpulse-backend.onrender.com/api/cluster')
       .then(res => res.json())
       .then(data => {
-        // CHANGED: Safety check to prevent React from crashing
+        // Safety check to prevent React from crashing
         if (Array.isArray(data)) {
           setClusters(data);
         } else {
