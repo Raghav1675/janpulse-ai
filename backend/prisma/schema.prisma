@@ -19,7 +19,8 @@ model Grievance {
   location         String?
   urgency_score    Int
   sentiment        String
-  status           String   @default("Pending")
-  cluster_id       Int?     // For Python ML grouping later
+  status           String   @default("Pending") // Pending, In Progress, Resolved
+  contact_agreed   Boolean  @default(false)
+  submitter_phone  String?
   created_at       DateTime @default(now())
 }

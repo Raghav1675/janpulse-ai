@@ -1,93 +1,76 @@
-import { spawn } from 'child_process';
-import { processCitizenSubmission } from '../services/geminiService.js';
 import { PrismaClient } from '@prisma/client';
+import { processCitizenSubmission } from '../services/geminiService.js';
 
 const prisma = new PrismaClient();
+
+// 1. Submit & Split Multiple Grievances
 export const submitGrievance = async (req, res) => {
   try {
-    const { text } = req.body;
+    const { text, contactAgreed, phone } = req.body;
     
-    // 1. Get the AI categorization from Gemini
-    const structuredData = await processCitizenSubmission(text);
+    // Gemini now returns an ARRAY of distinct issues
+    const extractedIssues = await processCitizenSubmission(text);
     
-    // 2. Save the complaint AND the AI data permanently to Neon PostgreSQL
-    const savedGrievance = await prisma.grievance.create({
-      data: {
-        raw_text: text,
-        category: structuredData.category,
-        location: structuredData.location,
-        urgency_score: structuredData.urgency_score,
-        sentiment: structuredData.sentiment,
-        status: "Pending"
-      }
-    });
+    // Save every distinct issue into the Neon database as its own row
+    const savedGrievances = await Promise.all(
+      extractedIssues.map(async (issue) => {
+        return prisma.grievance.create({
+          data: {
+            raw_text: text, // Keep the original context
+            category: issue.category,
+            location: issue.location || "Unknown",
+            urgency_score: issue.urgency_score,
+            sentiment: issue.sentiment,
+            status: "Pending",
+            contact_agreed: contactAgreed || false,
+            submitter_phone: phone || null
+          }
+        });
+      })
+    );
 
-    // 3. Send the saved data back to the React frontend
-    res.status(200).json({ success: true, data: savedGrievance });
+    res.status(200).json({ success: true, data: savedGrievances });
   } catch (error) {
     console.error("Gemini/DB Error:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
 
+// 2. Feed the MP Dashboard (No Python needed)
 export const clusterGrievances = async (req, res) => {
   try {
-    // 1. Fetch all live citizen grievances from Neon PostgreSQL
     const liveGrievances = await prisma.grievance.findMany({
       orderBy: { created_at: 'desc' }
     });
 
-    // Safety Check: If your database is completely empty, return an empty array early
-    if (!liveGrievances || liveGrievances.length === 0) {
-      return res.status(200).json([]);
-    }
-
-    // 2. Format the database records so the Python script expects them
-    // (Python needs an array of objects containing text strings)
-    const formattedGrievances = liveGrievances.map(g => ({
-      id: g.id,
-      text: g.raw_text,
+    // Format the database records for the React UI
+    const formattedData = liveGrievances.map((g) => ({
+      cluster_id: g.id,
+      text: `${g.category} issue reported in ${g.location}`,
       category: g.category,
       location: g.location,
-      urgency_score: g.urgency_score,
-      sentiment: g.sentiment
+      complaint_count: 1, 
+      urgency: g.urgency_score,
+      status: g.status
     }));
 
-    // 3. Spawn the Python process using your virtual environment
-    const pythonProcess = spawn('./venv/bin/python', ['./ml-engine/clustering.py']);
+    res.status(200).json(formattedData);
+  } catch (error) {
+    console.error("Database Fetch Error:", error);
+    res.status(500).json({ success: false, error: "Could not fetch grievances" });
+  }
+};
 
-    let resultData = '';
-    let errorData = '';
-
-    // 4. Pipe the live database records into Python's standard input
-    pythonProcess.stdin.write(JSON.stringify(formattedGrievances));
-    pythonProcess.stdin.end();
-
-    pythonProcess.stdout.on('data', (data) => { resultData += data.toString(); });
-    pythonProcess.stderr.on('data', (data) => { errorData += data.toString(); });
-
-    pythonProcess.on('error', (error) => {
-      console.error("Node failed to start Python:", error);
-      if (!res.headersSent) res.status(500).json({ error: "Failed to start Python process" });
+// 3. NEW ROUTE: MP Updates Status (Pending -> Resolved)
+export const updateStatus = async (req, res) => {
+  try {
+    const { id, newStatus } = req.body;
+    const updated = await prisma.grievance.update({
+      where: { id: parseInt(id) },
+      data: { status: newStatus }
     });
-
-    pythonProcess.on('close', (code) => {
-      if (code !== 0) {
-        console.error("Python Script Error:", errorData);
-        if (!res.headersSent) return res.status(500).json({ error: "Clustering failed" });
-      }
-      try {
-        if (!res.headersSent) {
-          // 5. Send the AI-clustered live data back to your React dashboard
-          res.status(200).json(JSON.parse(resultData));
-        }
-      } catch (e) {
-        if (!res.headersSent) res.status(500).json({ error: "Invalid JSON from Python script" });
-      }
-    });
-
-  } catch (dbError) {
-    console.error("Database Fetch Error inside Cluster Controller:", dbError);
-    res.status(500).json({ success: false, error: "Could not fetch grievances from database" });
+    res.status(200).json({ success: true, data: updated });
+  } catch (error) {
+    res.status(500).json({ success: false, error: "Status update failed" });
   }
 };
