@@ -1,10 +1,15 @@
 import express from 'express';
-import { submitGrievance, clusterGrievances } from '../controllers/apiController.js';
+import { submitGrievance, clusterGrievances, updateStatus } from '../controllers/apiController.js';
 
 const router = express.Router();
 
-// Define the endpoints and attach their controllers
+// Route for submitting grievances (Citizen)
 router.post('/submit', submitGrievance);
-router.post('/cluster', clusterGrievances);
+
+// Route for fetching grievances (MP Dashboard)
+router.get('/cluster', clusterGrievances);
+
+// Route for updating status (MP Dashboard actions)
+router.patch('/status', updateStatus);
 
 export default router;
